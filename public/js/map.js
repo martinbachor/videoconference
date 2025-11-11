@@ -1,10 +1,11 @@
 const socket = io('/');
-const screensEls = document.querySelectorAll('.screen');
 
+const screensEls = document.querySelectorAll('.screen');
 let myScreen = null;
 
+// vykreslenie stavu obrazoviek
 function renderScreens(state) {
-  screensEls.forEach(el => {
+  screensEls.forEach((el) => {
     const id = el.dataset.screen;
     const info = state[id];
     const statusEl = el.querySelector('.status');
@@ -26,32 +27,41 @@ function renderScreens(state) {
   });
 }
 
-socket.on('screens-state', state => {
+// server poslal stav
+socket.on('screens-state', (state) => {
   renderScreens(state);
 });
 
-socket.on('screen-busy', ({ screenId }) => {
-  alert(`Obrazovka ${screenId} je už obsadená.`);
-});
-
-socket.on('screen-error', ({ message }) => {
-  alert(message || 'Chyba pri priradení obrazovky.');
-});
-
+// server potvrdil priradenie (aktuálne to len držíme, okno už je otvorené)
 socket.on('screen-assigned', ({ screenId }) => {
+  console.log('✅ screen-assigned prijatý:', screenId);
   myScreen = screenId;
-  alert(`Bol si priradený na ${screenId}.`);
-  // Tu neskôr presmerujeme na konkrétnu stránku s videom
-  // napr.: window.location.href = `/room/${screenId}`;
 });
 
-// Kliknutie na obrazovku v mape
-screensEls.forEach(el => {
+// obrazovky - kliknutie
+screensEls.forEach((el) => {
   el.addEventListener('click', () => {
     const screenId = el.dataset.screen;
-    if (el.classList.contains('occupied')) return;
+    // ak je obsadená, nič
+    if (el.classList.contains('occupied')) {
+      return;
+    }
 
-    const name = prompt('Zadaj svoje meno:') || 'Účastník';
+    const name = prompt('Zadaj svoje meno:');
+    if (!name) return;
+
+    // 1) otvor nové okno s obrazovkou
+    window.open(`/screen/${screenId}`, '_blank');
+
+    // 2) pošli serveru, že sa chceš priradiť na túto obrazovku
     socket.emit('request-screen', { screenId, name });
   });
+});
+
+// pri zatvorení tabu pošli info (ak bol priradený)
+// server to použije na uvoľnenie obrazovky
+window.addEventListener('beforeunload', () => {
+  if (myScreen) {
+    socket.emit('leave-screen');
+  }
 });
