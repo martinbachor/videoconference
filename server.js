@@ -1,5 +1,4 @@
 const express = require('express');
-const { v4: uuidV4 } = require('uuid');
 const http = require('http');
 const socketIO = require('socket.io');
 
@@ -12,7 +11,7 @@ app.set('view engine', 'ejs');
 app.set('views', 'views');
 app.use(express.static('public'));
 
-// Stav obrazoviek v miestnosti
+// Stav obrazoviek (1 účastník na obrazovku)
 const screens = {
   screen1: { occupant: null },
   screen2: { occupant: null },
@@ -33,37 +32,37 @@ function publicScreensState() {
 
 // ---------- ROUTES ----------
 
-// 1) Mapa miestnosti (hlavná stránka)
+// Mapa miestnosti
 app.get('/', (req, res) => {
-  res.render('map'); // map.ejs
+  res.render('map'); // views/map.ejs
 });
 
-// 2) Obrazovky v miestnosti (PC1–PC4)
+// Obrazovky v miestnosti (PC1–PC4)
 app.get('/screen/:id', (req, res) => {
   const screenId = req.params.id;
   if (!screens[screenId]) {
     return res.status(404).send('Neznáma obrazovka');
   }
-  res.render('screen', { screenId }); // screen.ejs
+  res.render('screen', { screenId }); // views/screen.ejs
 });
 
-// 3) (Voliteľné) klasická room URL, ak ju chceš mať
+// (voliteľné) klasická room, ak ju chceš neskôr použiť
 app.get('/room/:room', (req, res) => {
   res.render('room', { roomId: req.params.room });
 });
-
-// !!! ŽIADNE app.get('/:room', ...) už nedávaj.
-// To by zhltlo /screen/screen1 a dostaneš Cannot GET alebo zlý view.
 
 // ---------- SOCKET.IO LOGIKA ----------
 
 io.on('connection', socket => {
   console.log('Nové pripojenie:', socket.id);
 
-  // Po pripojení pošli stav obrazoviek
+  // vlastné pole na uloženie, ktorú obrazovku má tento socket
+  socket.screenId = null;
+
+  // pošleme stav obrazoviek
   socket.emit('screens-state', publicScreensState());
 
-  // Žiadosť o obsadenie obrazovky
+  // žiadosť o obsadenie obrazovky
   socket.on('request-screen', ({ screenId, name }) => {
     const screen = screens[screenId];
 
@@ -81,38 +80,33 @@ io.on('connection', socket => {
       socketId: socket.id,
       name: name || 'Účastník'
     };
-    socket.data.screenId = screenId;
+
+    socket.screenId = screenId; // 🔴 tu bola chyba, už nie socket.data
 
     io.emit('screens-state', publicScreensState());
     socket.emit('screen-assigned', { screenId });
   });
 
-  // Dobrovoľný leave
+  // dobrovoľný leave
   socket.on('leave-screen', () => {
-    const screenId = socket.data.screenId;
-    if (
-      screenId &&
-      screens[screenId]?.occupant?.socketId === socket.id
-    ) {
+    const screenId = socket.screenId;
+    if (screenId && screens[screenId]?.occupant?.socketId === socket.id) {
       screens[screenId].occupant = null;
-      socket.data.screenId = null;
+      socket.screenId = null;
       io.emit('screens-state', publicScreensState());
     }
   });
 
-  // Auto-uvoľnenie pri disconnecte
+  // auto-uvoľnenie pri disconnecte
   socket.on('disconnect', () => {
-    const screenId = socket.data.screenId;
-    if (
-      screenId &&
-      screens[screenId]?.occupant?.socketId === socket.id
-    ) {
+    const screenId = socket.screenId;
+    if (screenId && screens[screenId]?.occupant?.socketId === socket.id) {
       screens[screenId].occupant = null;
       io.emit('screens-state', publicScreensState());
     }
   });
 
-  // (stará Zoom-clone logika, nechávam ak ju chceš použiť na /room/:room)
+  // pôvodná zoom-clone logika (ak potrebuješ /room/:room)
   socket.on('join-room', (roomId, userId) => {
     socket.join(roomId);
     socket.to(roomId).broadcast.emit('user-connected', userId);
@@ -122,6 +116,7 @@ io.on('connection', socket => {
     });
   });
 });
+
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {

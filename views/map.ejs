@@ -15,7 +15,6 @@
     }
     h1 { margin-bottom: 8px; }
     p { margin-top: 0; margin-bottom: 24px; color: #9ca3af; }
-
     .room-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -29,22 +28,12 @@
       text-align: center;
       border: 1px solid #374151;
       cursor: pointer;
-      transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.1s ease;
+      transition: transform 0.1s, box-shadow 0.1s, background 0.1s;
     }
-    .screen-title {
-      font-weight: 600;
-      margin-bottom: 8px;
-    }
-    .status {
-      font-size: 14px;
-    }
-    .free {
-      background: #064e3b;
-    }
-    .occupied {
-      background: #7f1d1d;
-      cursor: not-allowed;
-    }
+    .screen-title { font-weight: 600; margin-bottom: 8px; }
+    .status { font-size: 14px; }
+    .free { background: #064e3b; }
+    .occupied { background: #7f1d1d; cursor: not-allowed; }
     .screen:hover:not(.occupied) {
       transform: translateY(-2px);
       box-shadow: 0 8px 24px rgba(0,0,0,0.4);
