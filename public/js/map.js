@@ -2,8 +2,10 @@ const socket = io('/');
 
 const screensEls = document.querySelectorAll('.screen');
 let myScreen = null;
+let myPeer = null;
+let localStream = null;
 
-// vykreslenie stavu obrazoviek
+// vykreslenie stavu
 function renderScreens(state) {
   screensEls.forEach((el) => {
     const id = el.dataset.screen;
@@ -27,39 +29,81 @@ function renderScreens(state) {
   });
 }
 
-// server poslal stav
 socket.on('screens-state', (state) => {
   renderScreens(state);
 });
 
-// server potvrdil priradenie (aktuálne to len držíme, okno už je otvorené)
+// po potvrdení z servera si len zapamätáme screenId
 socket.on('screen-assigned', ({ screenId }) => {
-  console.log('✅ screen-assigned prijatý:', screenId);
+  console.log('✅ screen-assigned:', screenId);
   myScreen = screenId;
+  // call sa už spúšťa v handleJoinToScreen
 });
 
-// obrazovky - kliknutie
+// klik na obrazovku
 screensEls.forEach((el) => {
   el.addEventListener('click', () => {
     const screenId = el.dataset.screen;
-    // ak je obsadená, nič
-    if (el.classList.contains('occupied')) {
-      return;
-    }
+    if (el.classList.contains('occupied')) return;
 
-    const name = prompt('Zadaj svoje meno:');
-    if (!name) return;
-
-    // 1) otvor nové okno s obrazovkou
-    window.open(`/screen/${screenId}`, '_blank');
-
-    // 2) pošli serveru, že sa chceš priradiť na túto obrazovku
-    socket.emit('request-screen', { screenId, name });
+    handleJoinToScreen(screenId);
   });
 });
 
-// pri zatvorení tabu pošli info (ak bol priradený)
-// server to použije na uvoľnenie obrazovky
+async function handleJoinToScreen(screenId) {
+  const name = prompt('Zadaj svoje meno:');
+  if (!name) return;
+
+  // otvor screen (simulácia fyzickej obrazovky)
+  window.open(`/screen/${screenId}`, '_blank');
+
+  // pošli serveru žiadosť obsadiť túto obrazovku
+  socket.emit('request-screen', { screenId, name });
+
+  // priprav PeerJS a lokálny stream (kamera + mikrofón)
+  try {
+    if (!localStream) {
+      localStream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true,
+      });
+    }
+
+    if (!myPeer) {
+      myPeer = new Peer(undefined, {
+        host: 'localhost',
+        port: 3001,
+        path: '/peerjs',
+      });
+
+      myPeer.on('error', (err) => {
+        console.error('Peer error:', err);
+      });
+    }
+
+    myPeer.on('open', (id) => {
+      console.log('Môj PeerJS ID:', id);
+      // zavolaj priradenú obrazovku
+      const call = myPeer.call(screenId, localStream);
+      if (!call) {
+        console.error('Nepodarilo sa zavolať screen', screenId);
+      }
+    });
+
+    // ak už peer beží a otvor event už nastal, môžeš volať hneď
+    if (myPeer.open) {
+      const call = myPeer.call(screenId, localStream);
+      if (!call) {
+        console.error('Nepodarilo sa zavolať screen (instant) ', screenId);
+      }
+    }
+  } catch (err) {
+    console.error('Chyba pri získaní média:', err);
+    alert('Nepodarilo sa zapnúť kameru/mikrofón.');
+  }
+}
+
+// pri zatvorení tabu -> odhlás sa
 window.addEventListener('beforeunload', () => {
   if (myScreen) {
     socket.emit('leave-screen');
