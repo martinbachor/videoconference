@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8" />
+  <title><%= screenId %> - miestnosť</title>
+  <style>
+    body {
+      margin: 0;
+      background: #000;
+      color: #e5e7eb;
+      font-family: system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    header {
+      padding: 8px 16px;
+      background: #111827;
+      font-size: 14px;
+    }
+    #status {
+      color: #9ca3af;
+    }
+    #video-area {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #6b7280;
+      font-size: 18px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div><strong><%= screenId %></strong> – obrazovka v miestnosti</div>
+    <div id="status">Čakám na účastníka...</div>
+  </header>
+  <div id="video-area">
+    Tu bude video priradeného účastníka / prezentácia.
+  </div>
+
+  <script>
+    window.SCREEN_ID = "<%= screenId %>";
+  </script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/screen.js"></script>
+</body>
+</html>
