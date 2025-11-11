@@ -3,6 +3,9 @@ const screenId = window.SCREEN_ID;
 const statusEl = document.getElementById('status');
 const videoArea = document.getElementById('video-area');
 
+// oznám serveru, že tento socket je obrazovka screenId
+socket.emit('register-screen', { screenId });
+
 socket.on('screens-state', state => {
   const info = state[screenId];
   if (!info) {
@@ -12,7 +15,7 @@ socket.on('screens-state', state => {
 
   if (info.occupied) {
     statusEl.textContent = `Pripojený: ${info.name || 'účastník'}`;
-    videoArea.textContent = 'Tu zobrazíš video stream tohto účastníka (napojíme cez PeerJS).';
+    videoArea.textContent = 'Tu zobrazíš video stream tohto účastníka.';
   } else {
     statusEl.textContent = 'Čakám na účastníka...';
     videoArea.textContent = 'Žiadny účastník nie je priradený.';

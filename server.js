@@ -56,13 +56,22 @@ app.get('/room/:room', (req, res) => {
 io.on('connection', socket => {
   console.log('Nové pripojenie:', socket.id);
 
-  // vlastné pole na uloženie, ktorú obrazovku má tento socket
-  socket.screenId = null;
+  // predvolený stav
+  socket.screenId = null;     // pre účastníka – na ktorú obrazovku je priradený
+  socket.isScreen = false;    // true = toto je fyzická obrazovka /screen/:id
 
-  // pošleme stav obrazoviek
+  // hneď po pripojení pošleme stav obrazoviek
   socket.emit('screens-state', publicScreensState());
 
-  // žiadosť o obsadenie obrazovky
+  // ----- registrácia obrazovky (/screen/:id) -----
+  socket.on('register-screen', ({ screenId }) => {
+    if (!screens[screenId]) return;
+    socket.isScreen = true;
+    socket.screenId = screenId;
+    console.log(`Socket ${socket.id} registrovaný ako obrazovka ${screenId}`);
+  });
+
+  // ----- žiadosť remote účastníka obsadiť obrazovku -----
   socket.on('request-screen', ({ screenId, name }) => {
     const screen = screens[screenId];
 
@@ -76,35 +85,69 @@ io.on('connection', socket => {
       return;
     }
 
+    // priradíme účastníka k obrazovke
     screen.occupant = {
       socketId: socket.id,
       name: name || 'Účastník'
     };
 
-    socket.screenId = screenId; // 🔴 tu bola chyba, už nie socket.data
+    socket.screenId = screenId;   // tento socket reprezentuje účastníka na tejto obrazovke
+    socket.isScreen = false;      // istota, že toto nie je screen socket
 
     io.emit('screens-state', publicScreensState());
     socket.emit('screen-assigned', { screenId });
   });
 
-  // dobrovoľný leave
+  // ----- účastník sa dobrovoľne odhlasuje -----
   socket.on('leave-screen', () => {
+    if (!socket.screenId || socket.isScreen) return; // obrazovka sa takto neodhlasuje
     const screenId = socket.screenId;
-    if (screenId && screens[screenId]?.occupant?.socketId === socket.id) {
-      screens[screenId].occupant = null;
+    const screen = screens[screenId];
+
+    if (screen && screen.occupant && screen.occupant.socketId === socket.id) {
+      screen.occupant = null;
       socket.screenId = null;
       io.emit('screens-state', publicScreensState());
     }
   });
 
-  // auto-uvoľnenie pri disconnecte
+  // ----- disconnect -----
   socket.on('disconnect', () => {
-    const screenId = socket.screenId;
-    if (screenId && screens[screenId]?.occupant?.socketId === socket.id) {
-      screens[screenId].occupant = null;
-      io.emit('screens-state', publicScreensState());
+    // 1) Ak je to remote účastník priradený k obrazovke -> uvoľniť obrazovku
+    if (!socket.isScreen && socket.screenId) {
+      const screenId = socket.screenId;
+      const screen = screens[screenId];
+      if (screen && screen.occupant && screen.occupant.socketId === socket.id) {
+        screen.occupant = null;
+        console.log(`Účastník na ${screenId} sa odpojil (socket ${socket.id})`);
+        io.emit('screens-state', publicScreensState());
+      }
+    }
+
+    // 2) Ak je to samotná obrazovka -> uvoľniť jej obrazovku (ak bola obsadená)
+    if (socket.isScreen && socket.screenId) {
+      const screenId = socket.screenId;
+      const screen = screens[screenId];
+      if (screen && screen.occupant) {
+        // buď účastník skončil, alebo ho chceme odviazať od tejto obrazovky
+        console.log(`Obrazovka ${screenId} spadla, uvoľňujem ju.`);
+        screen.occupant = null;
+        io.emit('screens-state', publicScreensState());
+      }
     }
   });
+
+  // ----- pôvodná zoom-clone logika (ak chceš) -----
+  socket.on('join-room', (roomId, userId) => {
+    socket.join(roomId);
+    socket.to(roomId).broadcast.emit('user-connected', userId);
+
+    socket.on('disconnect', () => {
+      socket.to(roomId).broadcast.emit('user-disconnected', userId);
+    });
+  });
+});
+
 
   // pôvodná zoom-clone logika (ak potrebuješ /room/:room)
   socket.on('join-room', (roomId, userId) => {
